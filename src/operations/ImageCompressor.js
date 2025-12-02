@@ -1,10 +1,10 @@
 import sharp from 'sharp'
+import { statSync } from 'fs'
 import { Logger } from '../utils/Logger.js'
-import fs from 'fs'
+import { PathUtils } from '../utils/PathUtils.js'
 
 /**
  * Compresor de imágenes con algoritmos optimizados
- * Template Method Pattern: Proceso de compresión estructurado
  */
 export class ImageCompressor {
 	/**
@@ -26,8 +26,8 @@ export class ImageCompressor {
 				metadata = 'none',
 			} = options
 
-			// Obtener tamaño original usando fs.stat
-			const originalStats = fs.statSync(inputPath)
+			// Obtener tamaño original usando statSync
+			const originalStats = statSync(inputPath)
 			const originalSize = originalStats.size
 
 			let pipeline = sharp(inputPath)
@@ -53,30 +53,23 @@ export class ImageCompressor {
 			// Guardar imagen
 			await pipeline.toFile(outputPath)
 
-			// Obtener tamaño optimizado usando fs.stat
-			const optimizedStats = fs.statSync(outputPath)
+			// Obtener tamaño optimizado usando statSync
+			const optimizedStats = statSync(outputPath)
 			const optimizedSize = optimizedStats.size
-			const optimizedMetadata = await sharp(outputPath).metadata()
-			const optimizedImageStats = await sharp(outputPath).stats()
+			const reduction =
+				originalSize > 0 ? (((originalSize - optimizedSize) / originalSize) * 100).toFixed(1) : 0
+
+			Logger.success(`Compresión completada: ${PathUtils.getBaseName(outputPath)}`)
 
 			return {
 				success: true,
 				originalSize: originalSize,
 				optimizedSize: optimizedSize,
-				reduction: (((originalSize - optimizedSize) / originalSize) * 100).toFixed(1),
+				reduction: reduction,
 				format: format,
-				metadata: {
-					original: await sharp(inputPath).metadata(),
-					optimized: optimizedMetadata,
-				},
-				stats: {
-					original: await sharp(inputPath).stats(),
-					optimized: optimizedImageStats,
-				},
 			}
 		} catch (error) {
-      Logger.error(`Error en compresión: ${error.message}`)
-      console.log(error)
+			Logger.error(`Error en compresión: ${error.message}`)
 			throw error
 		}
 	}
@@ -95,14 +88,14 @@ export class ImageCompressor {
 					lossless: options.lossless || false,
 					nearLossless: options.nearLossless || false,
 					alphaQuality: options.alphaQuality || quality,
-					effort: options.effort || 6, // 0-6, más alto = mejor compresión pero más lento
+					effort: options.effort || 6,
 				}
 
 			case 'avif':
 				return {
 					...baseConfig,
 					lossless: options.lossless || false,
-					effort: options.effort || 4, // 0-9
+					effort: options.effort || 4,
 				}
 
 			case 'jpeg':
@@ -119,7 +112,7 @@ export class ImageCompressor {
 
 			case 'png':
 				return {
-					compressionLevel: options.compressionLevel || 9, // 0-9
+					compressionLevel: options.compressionLevel || 9,
 					palette: options.palette || true,
 					colors: options.colors || 256,
 					dither: options.dither || 1.0,
@@ -152,35 +145,23 @@ export class ImageCompressor {
 	}
 
 	/**
-	 * Encuentra la mejor calidad sin pérdida visible
-	 * @param {string} inputPath - Ruta de entrada
-	 * @returns {Promise<number>} Calidad óptima
+	 * Comprime múltiples imágenes
+	 * @param {Array} images - Array de objetos {input, output}
+	 * @param {Object} options - Opciones de compresión
+	 * @returns {Promise<Array>} Resultados
 	 */
-	static async findOptimalQuality(inputPath) {
-		Logger.info('Buscando calidad óptima...')
+	static async batchCompress(images, options = {}) {
+		const results = []
 
-		const qualities = [100, 90, 80, 70, 60, 50]
-		let optimalQuality = 80 // Default
-
-		try {
-			for (const quality of qualities) {
-				const tempPath = `${inputPath}.temp.webp`
-				await sharp(inputPath).webp({ quality }).toFile(tempPath)
-
-				const originalSize = (await sharp(inputPath).metadata()).size
-				const tempSize = (await sharp(tempPath).metadata()).size
-				const reduction = ((originalSize - tempSize) / originalSize) * 100
-
-				// Si la reducción es significativa y calidad aceptable
-				if (reduction > 30 && quality >= 70) {
-					optimalQuality = quality
-					break
-				}
+		for (const image of images) {
+			try {
+				const result = await this.compress(image.input, image.output, options)
+				results.push({ ...image, success: true, result })
+			} catch (error) {
+				results.push({ ...image, success: false, error: error.message })
 			}
-		} catch (error) {
-			console.warn('No se pudo determinar calidad óptima, usando 80 por defecto')
 		}
 
-		return optimalQuality
+		return results
 	}
 }

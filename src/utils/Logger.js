@@ -1,4 +1,4 @@
-import chalk from 'chalk';
+import chalk from 'chalk'
 
 /**
  * Logger con colores para mejor UX
@@ -37,7 +37,7 @@ export class Logger {
 
 	static stats(originalSize, optimizedSize, format) {
 		// Verificar que los tamaños sean números válidos
-		const isValidSize = size => !isNaN(size) && isFinite(size) && size >= 0
+		const isValidSize = size => typeof size === 'number' && !isNaN(size) && isFinite(size) && size >= 0
 
 		const original = isValidSize(originalSize) ? originalSize : 0
 		const optimized = isValidSize(optimizedSize) ? optimizedSize : 0
@@ -47,7 +47,9 @@ export class Logger {
 
 		console.log(chalk.bold('\n📊 ESTADÍSTICAS DE OPTIMIZACIÓN:'))
 		console.log(chalk.gray('─'.repeat(40)))
-		console.log(`Formato final: ${chalk.bold(format ? format.toUpperCase() : 'DESCONOCIDO')}`)
+		console.log(
+			`Formato final: ${chalk.bold(format ? format.toUpperCase() : PathUtils.getExtension(format).toUpperCase())}`,
+		)
 		console.log(`Tamaño original: ${chalk.yellow(this.formatBytes(original))}`)
 		console.log(`Tamaño optimizado: ${chalk.green(this.formatBytes(optimized))}`)
 		console.log(
@@ -64,7 +66,7 @@ export class Logger {
 
 	static formatBytes(bytes) {
 		// Manejar casos de NaN o valores inválidos
-		if (isNaN(bytes) || !isFinite(bytes) || bytes < 0) {
+		if (typeof bytes !== 'number' || isNaN(bytes) || !isFinite(bytes) || bytes < 0) {
 			return '0 Bytes'
 		}
 
